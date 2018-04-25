@@ -1,115 +1,411 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Web.Http;
 using refactor_me.Models;
+using refactor_me.services;
+using refactor_me.services.Models;
 
 namespace refactor_me.Controllers
 {
     [RoutePrefix("products")]
     public class ProductsController : ApiController
     {
-        [Route]
-        [HttpGet]
-        public Products GetAll()
+        private readonly ProductService _productsService;
+        public ProductsController(ProductService productsService)
         {
-            return new Products();
+            _productsService = productsService;
         }
 
+        /// <summary>
+        /// Get all products
+        /// </summary>
+        /// <returns></returns>
         [Route]
         [HttpGet]
-        public Products SearchByName(string name)
+        public CollectionsDto<ProductDto> GetAll()
         {
-            return new Products(name);
+            try
+            {
+                return ConvertToProductsDto(_productsService.GetAll());
+            }
+            catch (Exception)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Failed to get products"));
+            }
         }
 
+        /// <summary>
+        /// Search products by name
+        /// </summary>
+        /// <param name="name"></param>
+        /// <returns></returns>
+        [Route]
+        [HttpGet]
+        public CollectionsDto<ProductDto> SearchByName(string name)
+        {
+            try
+            {
+                return ConvertToProductsDto(_productsService.SearchByName(name));
+            }
+            catch (Exception e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Failed to return products"));
+            }
+
+        }
+
+        /// <summary>
+        /// Get product by id
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
         [Route("{id}")]
         [HttpGet]
-        public Product GetProduct(Guid id)
+        public ProductDto GetProduct(Guid id)
         {
-            var product = new Product(id);
-            if (product.IsNew)
-                throw new HttpResponseException(HttpStatusCode.NotFound);
+            try
+            {
+                return ConvertToProductDto(_productsService.GetProduct(id));
+            }
+            catch (NullReferenceException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.NotFound, e.Message));
+                
+            }
+            catch (DataException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.Conflict, e.Message));
 
-            return product;
+            }
+            catch (Exception e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Failed to get product"));
+                
+            }
+          
         }
 
+        /// <summary>
+        /// create new product
+        /// </summary>
+        /// <param name="productDto"></param>
         [Route]
         [HttpPost]
-        public void Create(Product product)
+        public void Create(ProductDto productDto)
         {
-            product.Save();
+            try
+            {
+                _productsService.Create(ConvertToProductModel(productDto));
+            }
+            catch (ArgumentException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, e.Message));
+
+            }
+            catch (Exception)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Failed to create product"));
+
+            }
+
+
         }
 
+        /// <summary>
+        /// Update product by id
+        /// </summary>
+        /// <param name="id"></param>
+        /// <param name="productDto"></param>
         [Route("{id}")]
         [HttpPut]
-        public void Update(Guid id, Product product)
+        public void Update(Guid id, ProductDto productDto)
         {
-            var orig = new Product(id)
+            try
             {
-                Name = product.Name,
-                Description = product.Description,
-                Price = product.Price,
-                DeliveryPrice = product.DeliveryPrice
-            };
+                _productsService.Update(id, ConvertToProductModel(productDto));
 
-            if (!orig.IsNew)
-                orig.Save();
+            }
+            catch (ArgumentException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, e.Message));
+
+            }
+            catch (NullReferenceException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.NotFound, e.Message));
+
+            }
+            catch (Exception e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Failed to update product"));
+
+            }
+
         }
 
+        /// <summary>
+        /// delete product by id
+        /// </summary>
+        /// <param name="id"></param>
         [Route("{id}")]
         [HttpDelete]
         public void Delete(Guid id)
         {
-            var product = new Product(id);
-            product.Delete();
+            try
+            {
+                _productsService.Delete(id);
+            }
+            catch (NullReferenceException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.NotFound, e.Message));
+
+            }
+            catch (Exception e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Failed to delete product"));
+
+            }
+           
         }
 
+        /// <summary>
+        /// get options by product Id
+        /// </summary>
+        /// <param name="productId"></param>
+        /// <returns></returns>
         [Route("{productId}/options")]
         [HttpGet]
-        public ProductOptions GetOptions(Guid productId)
+        public CollectionsDto<ProductOptionDto> GetOptions(Guid productId)
         {
-            return new ProductOptions(productId);
+            try
+            {
+                return ConvertToProductOptionssDto(_productsService.GetOptions(productId));
+            }
+            catch (NullReferenceException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.NotFound, e.Message));
+
+            }
+            catch (DataException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.Conflict, e.Message));
+
+            }
+            catch (Exception e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, "failed to get options"));
+
+            }
+
         }
 
+        /// <summary>
+        /// Get product option by id
+        /// </summary>
+        /// <param name="productId"></param>
+        /// <param name="id"></param>
+        /// <returns></returns>
         [Route("{productId}/options/{id}")]
         [HttpGet]
-        public ProductOption GetOption(Guid productId, Guid id)
+        public ProductOptionDto GetOption(Guid productId, Guid id)
         {
-            var option = new ProductOption(id);
-            if (option.IsNew)
-                throw new HttpResponseException(HttpStatusCode.NotFound);
+            try
+            {
+                return ConvertoProductOptionDto(_productsService.GetOption(productId, id));
+            }
+            catch (NullReferenceException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.NotFound, e.Message));
 
-            return option;
+            }
+            catch (DataException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.Conflict, e.Message));
+
+            }
+            catch (Exception e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, "failed to get option"));
+
+            }
+
         }
 
+        /// <summary>
+        /// create new product option 
+        /// </summary>
+        /// <param name="productId"></param>
+        /// <param name="option"></param>
         [Route("{productId}/options")]
         [HttpPost]
-        public void CreateOption(Guid productId, ProductOption option)
+        public void CreateOption(Guid productId, ProductOptionDto option)
         {
-            option.ProductId = productId;
-            option.Save();
+            try
+            {
+                _productsService.CreateOption(productId, ConvertoProductOptionModel(option));
+            }
+            catch (ArgumentException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, e.Message));
+
+            }
+            catch (NullReferenceException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.NotFound, e.Message));
+
+            }
+            catch (DataException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.Conflict, e.Message));
+
+            }
+            catch (Exception e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, "failed to create option"));
+
+            }
+         
         }
 
+        /// <summary>
+        /// Update new options by id
+        /// </summary>
+        /// <param name="id"></param>
+        /// <param name="option"></param>
         [Route("{productId}/options/{id}")]
         [HttpPut]
-        public void UpdateOption(Guid id, ProductOption option)
+        public void UpdateOption(Guid id, ProductOptionDto option)
         {
-            var orig = new ProductOption(id)
+            try
             {
-                Name = option.Name,
-                Description = option.Description
-            };
+                _productsService.UpdateOption(id, ConvertoProductOptionModel(option));
+            }
+            catch (ArgumentException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, e.Message));
 
-            if (!orig.IsNew)
-                orig.Save();
+            }
+            catch (NullReferenceException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.NotFound, e.Message));
+
+            }
+            catch (DataException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.Conflict, e.Message));
+
+            }
+            catch (Exception e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, "failed to update option"));
+
+            }
+
         }
 
+        /// <summary>
+        /// delete options by id
+        /// </summary>
+        /// <param name="productId"></param>
+        /// <param name="id"></param>
         [Route("{productId}/options/{id}")]
         [HttpDelete]
-        public void DeleteOption(Guid id)
+        public void DeleteOption(Guid productId, Guid id)
         {
-            var opt = new ProductOption(id);
-            opt.Delete();
+            try
+            {
+                _productsService.DeleteOption(productId, id);
+            }
+            catch (NullReferenceException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.NotFound, e.Message));
+
+            }
+            catch (DataException e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.Conflict, e.Message));
+
+            }
+            catch (Exception e)
+            {
+                throw new HttpResponseException(Request.CreateErrorResponse(HttpStatusCode.BadRequest, "failed to delete option"));
+            }
+
         }
+
+        private CollectionsDto<ProductDto> ConvertToProductsDto(IEnumerable<ProductModel> products)
+        {
+            var productList = products.Select(ConvertToProductDto);
+
+           return new CollectionsDto<ProductDto>()
+           {
+              Items = productList.ToList()
+           };
+        }
+
+        private ProductDto ConvertToProductDto(ProductModel product)
+        {
+            return new ProductDto()
+            {
+                Id = product.Id,
+                DeliveryPrice = product.DeliveryPrice,
+                Description = product.Description,
+                Name = product.Name,
+                Price = product.Price
+            };
+        }
+
+        private ProductModel ConvertToProductModel(ProductDto product)
+        {
+            return new ProductModel()
+            {
+                Description = product.Description,
+                DeliveryPrice = product.DeliveryPrice,
+                Id = product.Id,
+                Name = product.Name,
+                Price = product.Price
+
+            };
+
+        }
+
+        private CollectionsDto<ProductOptionDto> ConvertToProductOptionssDto(IEnumerable<ProductOptionModel> options)
+        {
+            var optionList = options.Select(ConvertoProductOptionDto);
+
+            return new CollectionsDto<ProductOptionDto>
+            {
+                Items = optionList.ToList()
+            };
+        }
+
+        private ProductOptionDto ConvertoProductOptionDto(ProductOptionModel option)
+        {
+            return new ProductOptionDto()
+            {
+                Description = option.Description,
+                Id = option.Id,
+                Name = option.Name,
+                ProductId = option.ProductId
+            };
+
+        }
+
+        private ProductOptionModel ConvertoProductOptionModel(ProductOptionDto option)
+        {
+            return new ProductOptionModel()
+            {
+                Description = option.Description,
+                Id = option.Id,
+                Name = option.Name,
+                ProductId = option.ProductId
+            };
+
+        }
+
     }
 }
